@@ -170,7 +170,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)libraries\python38.lib;$(SolutionDir)libraries\$(Platform)\driverlog.lib;$(SolutionDir)libraries\$(Platform)\hidapi.lib;$(SolutionDir)libraries\$(Platform);$(SolutionDir)libraries</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(SolutionDir)libraries\$(Platform)\hidapi.lib;$(SolutionDir)libraries\$(Platform)\python38.lib;$(SolutionDir)libraries\$(Platform)\driverlog.lib;$(SolutionDir)libraries\$(Platform)\serial.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)libraries\$(Platform)\hidapi.lib;$(SolutionDir)libraries\$(Platform)\python38.lib;$(SolutionDir)libraries\$(Platform)\driverlog.lib;$(SolutionDir)libraries\$(Platform)\serial.lib;$(SolutionDir)libraries\$(Platform)\spectacularAI_realsensePlugin.lib;$(SolutionDir)libraries\$(Platform)\realsense-file.lib;$(SolutionDir)libraries\$(Platform)\realsense2.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

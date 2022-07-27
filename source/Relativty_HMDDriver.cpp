@@ -32,6 +32,9 @@
 #include "Relativty_components.h"
 #include "Relativty_base_device.h"
 
+#include <iostream>
+#include <librealsense2/rs.hpp>
+#include <spectacularAI/realsense/plugin.hpp>
 
 #include <string>
 
@@ -61,77 +64,31 @@ vr::EVRInitError Relativty::HMDDriver::Activate(uint32_t unObjectId) {
 	RelativtyDevice::Activate(unObjectId);
 	this->setProperties();
 
-
-
-
 	int result;
 	DriverLog("SERIAL: %s.\n", COMPORT);
 	DriverLog("IS MPU SERIAL: %d\n", isMPUSerial);
 	this->isMPUSerial = true;
-	/*
-	*/
-	if (!isMPUSerial)
-	{
-		this->handle = hid_open((unsigned short)m_iVid, (unsigned short)m_iPid, NULL);
-		if (!this->handle) {
-			#ifdef DRIVERLOG_H
-			DriverLog("USB: Unable to open HMD device with pid=%d and vid=%d.\n", m_iPid, m_iVid);
-			#else
-			Relativty::ServerDriver::Log("USB: Unable to open HMD device with pid=" + std::to_string(m_iPid) + " and vid=" + std::to_string(m_iVid) + ".\n");
-			#endif
-			return vr::VRInitError_Init_InterfaceNotFound;
-		}
 
-		result = hid_init(); //Result should be 0.
-		if (result) {
-			Relativty::ServerDriver::Log("USB: HID API initialization failed. \n");
-			return vr::VRInitError_Driver_TrackedDeviceInterfaceUnknown;
-		}
-	}
-	else
-	{
-		//relativ.setTimeout(serial::Timeout::simpleTimeout(1000));
-		this->relativ.setPort(COMPORT);
-		relativ.setBaudrate(115200);
-		while (!this->relativ.isOpen()) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			relativ.open();
-		}
-		Relativty::ServerDriver::Log("Thread1: Connected via SERIAL!");
-	}
-	
 
-	this->retrieve_quaternion_isOn = true;
-	this->retrieve_vector_isOn = true;
-	this->retrieve_quaternion_thread_worker = std::thread(&Relativty::HMDDriver::retrieve_device_quaternion_packet_threaded, this);
-	this->retrieve_vector_thread_worker = std::thread(&Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP, this);
-	/*
-	if (this->start_tracking_server) {
-		this->retrieve_vector_isOn = true;
-		this->retrieve_vector_thread_worker = std::thread(&Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP, this);
-		while (this->serverNotReady) {
-			// do nothing
-		}
-		this->startPythonTrackingClient_worker = std::thread(startPythonTrackingClient_threaded, this->PyPath);
-	}
-	*/
-	this->update_pose_thread_worker = std::thread(&Relativty::HMDDriver::update_pose_threaded, this);
+
+	this->update_pose_thread_worker = std::thread(&Relativty::HMDDriver::update_pose_threaded2, this);
 
 	return vr::VRInitError_None;
+
 }
 
-void Relativty::HMDDriver::Deactivate() {
-	this->retrieve_quaternion_isOn = false;
-	this->retrieve_quaternion_thread_worker.join();
-	hid_close(this->handle);
-	hid_exit();
 
-	if (this->start_tracking_server) {
-		this->retrieve_vector_isOn = false;
-		closesocket(this->sock);
-		this->retrieve_vector_thread_worker.join();
-		WSACleanup();
-	}
+void Relativty::HMDDriver::Deactivate() {
+	//this->retrieve_quaternion_isOn = false;
+	//this->retrieve_quaternion_thread_worker.join();
+	//hid_close(this->handle);
+	//hid_exit();
+
+	//this->retrieve_vector_isOn = false;
+	//closesocket(this->sock);
+	//this->retrieve_vector_thread_worker.join();
+	WSACleanup();
+
 	RelativtyDevice::Deactivate();
 	this->update_pose_thread_worker.join();
 
@@ -140,42 +97,130 @@ void Relativty::HMDDriver::Deactivate() {
 
 void Relativty::HMDDriver::update_pose_threaded() {
 	Relativty::ServerDriver::Log("Thread2: successfully started\n");
+
+	float normalize_min[3]{ this->normalizeMinX, this->normalizeMinY, this->normalizeMinZ };
+	float normalize_max[3]{ this->normalizeMaxX, this->normalizeMaxY, this->normalizeMaxZ };
+	float scales_coordinate_meter[3]{ this->scalesCoordinateMeterX, this->scalesCoordinateMeterY, this->scalesCoordinateMeterZ };
+	float offset_coordinate[3] = { this->offsetCoordinateX, this->offsetCoordinateY, this->offsetCoordinateZ };
+	float coordinate[3] = { 0, 0, 0 };
+	float rotation[4] = { 0, 0, 0, 0 };
+
+	Relativty::ServerDriver::Log("UDP SERVER: Initialising UDP COMMS.\n");
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+	{
+		Relativty::ServerDriver::Log("UDP SERVER: Failed to Init UDP\n");
+		return;
+	}
+	Relativty::ServerDriver::Log("UDP SERVER:  Initialised.\n");
+
+	// create a socket
+
+	if ((server_socket = socket(AF_INET, SOCK_DGRAM, 0)) == INVALID_SOCKET)
+	{
+		Relativty::ServerDriver::Log("UDP SERVER: Could not create socket.\n");
+		return;
+	}
+	Relativty::ServerDriver::Log("UDP SERVER: Socket created.\n");
+	WSAIoctl(server_socket, SIO_UDP_CONNRESET, &bNewBehavior, sizeof bNewBehavior, NULL, 0, &dwBytesReturned, NULL, NULL);
+	server.sin_family = AF_INET;
+	server.sin_addr.s_addr = INADDR_ANY;
+	server.sin_port = htons(PORT);
+	// bind
+	if (bind(server_socket, (sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
+	{
+		Relativty::ServerDriver::Log("UDP SERVER: Bind failed\n");
+		return;
+	}
+	puts("UDP SERVER: Bind done.");
+	this->serverNotReady = false;
+	Relativty::ServerDriver::Log("UDP SERVER: Waiting for incoming connections...\n");
+
 	while (m_unObjectId != vr::k_unTrackedDeviceIndexInvalid) {
-		if (this->new_quaternion_avaiable && this->new_vector_avaiable) {
-			m_Pose.qRotation.w = this->quat[0];
-			m_Pose.qRotation.x = this->quat[1];
-			m_Pose.qRotation.y = this->quat[2];
-			m_Pose.qRotation.z = this->quat[3];
+		
+		Relativty::ServerDriver::Log("UDP SERVER: Waiting for data...");
+		fflush(stdout);
+		char message[BUFLEN] = {};
 
-			m_Pose.vecPosition[0] = this->vector_xyz[0];
-			m_Pose.vecPosition[1] = this->vector_xyz[1];
-			m_Pose.vecPosition[2] = this->vector_xyz[2];
-
-			vr::VRServerDriverHost()->TrackedDevicePoseUpdated(m_unObjectId, m_Pose, sizeof(vr::DriverPose_t));
-			this->new_quaternion_avaiable = false;
-			this->new_vector_avaiable = false;
-
-		} else if (this->new_quaternion_avaiable) {
-			m_Pose.qRotation.w = this->quat[0];
-			m_Pose.qRotation.x = this->quat[1];
-			m_Pose.qRotation.y = this->quat[2];
-			m_Pose.qRotation.z = this->quat[3];
-
-			vr::VRServerDriverHost()->TrackedDevicePoseUpdated(m_unObjectId, m_Pose, sizeof(vr::DriverPose_t));
-			this->new_quaternion_avaiable = false;
-
-		} else if (this->new_vector_avaiable) {
-
-			m_Pose.vecPosition[0] = this->vector_xyz[0];
-			m_Pose.vecPosition[1] = this->vector_xyz[1];
-			m_Pose.vecPosition[2] = this->vector_xyz[2];
-
-			vr::VRServerDriverHost()->TrackedDevicePoseUpdated(m_unObjectId, m_Pose, sizeof(vr::DriverPose_t));
-			this->new_vector_avaiable = false;
-
+		// try to receive some data, this is a blocking call
+		int message_len;
+		int slen = sizeof(sockaddr_in);
+		if (message_len = recvfrom(server_socket, message, BUFLEN, 0, (sockaddr*)&client, &slen) == SOCKET_ERROR)
+		{
+			Relativty::ServerDriver::Log("UDP SERVER: recvfrom() failed");
+			exit(0);
 		}
+		std::string messageString = message;
+		if (isspace(messageString[0])) { messageString.erase(0, 1); }
+
+
+		std::string space_delimiter = " ";
+		std::vector<std::string> words{};
+
+		size_t pos = 0;
+
+		while ((pos = messageString.find(space_delimiter)) != std::string::npos) {
+			words.push_back(messageString.substr(0, pos));
+			messageString.erase(0, pos + space_delimiter.length());
+		}
+		
+		
+		coordinate[0] = std::stof(words[1]);
+		coordinate[1] = std::stof(words[2]);
+		coordinate[2] = std::stof(words[0]);
+
+		rotation[0] = std::stof(words[3]);
+		rotation[1] = std::stof(words[5]);
+		rotation[2] = std::stof(words[6]);
+		rotation[3] = std::stof(words[4]);
+				
+		Relativty::ServerDriver::Log("UDP SERVER: " + words[0] + "," + words[1] + "," + words[2] + "," + words[3] + "," + words[4] + "," + words[5] + "," + words[6] + "\n");
+
+		this->vector_xyz[0] = coordinate[0];
+		this->vector_xyz[1] = coordinate[1];
+		this->vector_xyz[2] = coordinate[2];
+		this->quat[0] = rotation[0];
+		this->quat[1] = rotation[2];
+		this->quat[2] = rotation[3];
+		this->quat[3] = rotation[1];
+		
+		this->calibrate_quaternion();
+
+		m_Pose.qRotation.w = this->quat[0];
+		m_Pose.qRotation.x = this->quat[1];
+		m_Pose.qRotation.y = this->quat[2];
+		m_Pose.qRotation.z = this->quat[3];
+
+		m_Pose.vecPosition[0] = this->vector_xyz[0];
+		m_Pose.vecPosition[1] = this->vector_xyz[1];
+		m_Pose.vecPosition[2] = this->vector_xyz[2];
+
+		vr::VRServerDriverHost()->TrackedDevicePoseUpdated(m_unObjectId, m_Pose, sizeof(vr::DriverPose_t));
+
 	}
 	Relativty::ServerDriver::Log("Thread2: successfully stopped\n");
+}
+
+
+void Relativty::HMDDriver::update_pose_threaded2()
+{
+	spectacularAI::rsPlugin::Pipeline vioPipeline(config);
+	rs2::device_list devices = rsContext.query_devices();
+	if (devices.size() != 1) {
+		DriverLog("Connect exactly one RealSense device.\n");
+	}
+	rs2::device device = devices.front();
+	vioPipeline.configureDevice(device);
+
+	rs2::config rsConfig;
+	vioPipeline.configureStreams(rsConfig);
+	auto vioSession = vioPipeline.startSession(rsConfig);
+
+	while (m_unObjectId != vr::k_unTrackedDeviceIndexInvalid)
+	{
+		auto vioOut = vioSession->waitForOutput();
+		//std::cout << vioOut->asJson() << std::endl;
+		DriverLog("%s\n", vioOut->asJson());
+	}
 }
 
 void Relativty::HMDDriver::calibrate_quaternion() {
@@ -197,6 +242,12 @@ void Relativty::HMDDriver::calibrate_quaternion() {
 	this->quat[2] = qres[2];
 	this->quat[3] = qres[3];
 }
+
+/*
+void Relativty::HMDDriver::dummy_quaternion_thread_func()
+{
+	//nothing :c
+};
 
 void Relativty::HMDDriver::retrieve_device_quaternion_packet_threaded() {
 	uint8_t packet_buffer[64];
@@ -344,8 +395,8 @@ void Relativty::HMDDriver::retrieve_device_quaternion_packet_threaded() {
 	}
 	Relativty::ServerDriver::Log("Thread1: successfully stopped\n");
 }
-
-
+*/
+/*
 void Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP()
 {
 	BOOL bNewBehavior = FALSE;
@@ -424,21 +475,21 @@ void Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP()
 			words.push_back(messageString.substr(0, pos));
 			messageString.erase(0, pos + space_delimiter.length());
 		}
-			
+
 		coordinate[0] = std::stof(words[0]);
 		coordinate[1] = std::stof(words[1]);
 		coordinate[2] = std::stof(words[2]);
 
 		Relativty::ServerDriver::Log("UDP SERVER: " + words[0] + "," + words[1] + "," + words[2] + "\n");
+		//Relativty::ServerDriver::Log("UDP SERVER: " + words[0] + "," + words[1] + "," + words[2] + words[3] + "," + words[4] + "," + words[5] + "," + words[6] + "\n");
 
-		Normalize(coordinate_normalized, coordinate, normalize_max, normalize_min, this->upperBound, this->lowerBound, scales_coordinate_meter, offset_coordinate);
-
+		//Normalize(coordinate_normalized, coordinate, normalize_max, normalize_min, this->upperBound, this->lowerBound, scales_coordinate_meter, offset_coordinate);
 		//this->vector_xyz[0] = coordinate_normalized[1];
 		//this->vector_xyz[1] = coordinate_normalized[2];
 		//this->vector_xyz[2] = coordinate_normalized[0];
-		this->vector_xyz[0] = coordinate[0];
-		this->vector_xyz[1] = coordinate[1];
-		this->vector_xyz[2] = coordinate[2];
+		this->vector_xyz[0] = coordinate[1];
+		this->vector_xyz[1] = coordinate[2];
+		this->vector_xyz[2] = coordinate[0];
 		this->new_vector_avaiable = true;
 
 		if (sendto(server_socket, message, strlen(message), 0, (sockaddr*)&client, sizeof(sockaddr_in)) == SOCKET_ERROR)
@@ -448,7 +499,120 @@ void Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP()
 		}
 	}
 }
+*/
+/*
+void Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP_REALSENSE()
+{
+	BOOL bNewBehavior = FALSE;
+	DWORD dwBytesReturned = 0;
+	sockaddr_in server, client;
+	WSADATA wsa;
 
+	float normalize_min[3]{ this->normalizeMinX, this->normalizeMinY, this->normalizeMinZ };
+	float normalize_max[3]{ this->normalizeMaxX, this->normalizeMaxY, this->normalizeMaxZ };
+	float scales_coordinate_meter[3]{ this->scalesCoordinateMeterX, this->scalesCoordinateMeterY, this->scalesCoordinateMeterZ };
+	float offset_coordinate[3] = { this->offsetCoordinateX, this->offsetCoordinateY, this->offsetCoordinateZ };
+
+	float coordinate[3]{ 0, 0, 0 };
+	float rotation[4]{ 0, 0, 0, 0 };
+	float coordinate_normalized[3];
+
+
+
+	Relativty::ServerDriver::Log("UDP SERVER: Initialising UDP COMMS.\n");
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+	{
+		Relativty::ServerDriver::Log("UDP SERVER: Failed to Init UDP\n");
+		return;
+	}
+	Relativty::ServerDriver::Log("UDP SERVER:  Initialised.\n");
+
+	// create a socket
+	SOCKET server_socket;
+	if ((server_socket = socket(AF_INET, SOCK_DGRAM, 0)) == INVALID_SOCKET)
+	{
+		Relativty::ServerDriver::Log("UDP SERVER: Could not create socket.\n");
+		return;
+	}
+	Relativty::ServerDriver::Log("UDP SERVER: Socket created.\n");
+	WSAIoctl(server_socket, SIO_UDP_CONNRESET, &bNewBehavior, sizeof bNewBehavior, NULL, 0, &dwBytesReturned, NULL, NULL);
+	server.sin_family = AF_INET;
+	server.sin_addr.s_addr = INADDR_ANY;
+	server.sin_port = htons(PORT);
+
+	// bind
+	if (bind(server_socket, (sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
+	{
+		Relativty::ServerDriver::Log("UDP SERVER: Bind failed\n");
+		return;
+	}
+	puts("UDP SERVER: Bind done.");
+	this->serverNotReady = false;
+	Relativty::ServerDriver::Log("UDP SERVER: Waiting for incoming connections...\n");
+
+	while (this->retrieve_vector_isOn)
+	{
+		Relativty::ServerDriver::Log("UDP SERVER: Waiting for data...");
+		fflush(stdout);
+		char message[BUFLEN] = {};
+
+		// try to receive some data, this is a blocking call
+		int message_len;
+		int slen = sizeof(sockaddr_in);
+		if (message_len = recvfrom(server_socket, message, BUFLEN, 0, (sockaddr*)&client, &slen) == SOCKET_ERROR)
+		{
+			Relativty::ServerDriver::Log("UDP SERVER: recvfrom() failed");
+			exit(0);
+		}
+
+		std::string messageString = message;
+		if (isspace(messageString[0])) { messageString.erase(0, 1); }
+
+
+		std::string space_delimiter = " ";
+		std::vector<std::string> words{};
+
+		size_t pos = 0;
+
+		while ((pos = messageString.find(space_delimiter)) != std::string::npos) {
+			words.push_back(messageString.substr(0, pos));
+			messageString.erase(0, pos + space_delimiter.length());
+		}
+
+		coordinate[0] = std::stof(words[1]);
+		coordinate[1] = std::stof(words[2]);
+		coordinate[2] = std::stof(words[0]);
+
+		rotation[0] = std::stof(words[3]);
+		rotation[1] = std::stof(words[5]);
+		rotation[2] = std::stof(words[6]);
+		rotation[3] = std::stof(words[4]);
+
+		Relativty::ServerDriver::Log("UDP SERVER: " + words[0] + "," + words[1] + "," + words[2] + words[3] + "," + words[4] + "," + words[5] + "," + words[6] + "\n");
+
+		this->vector_xyz[0] = coordinate[0];
+		this->vector_xyz[1] = coordinate[1];
+		this->vector_xyz[2] = coordinate[2];
+		this->quat[0] = rotation[0];
+		this->quat[1] = rotation[2];
+		this->quat[2] = rotation[3];
+		this->quat[3] = rotation[1];
+
+		this->calibrate_quaternion();
+
+		this->new_quaternion_avaiable = true;
+		this->new_vector_avaiable = true;
+
+		if (sendto(server_socket, message, strlen(message), 0, (sockaddr*)&client, sizeof(sockaddr_in)) == SOCKET_ERROR)
+		{
+			Relativty::ServerDriver::Log("sendto() failed");
+			return;
+		}
+	}
+}
+*/
+
+/*
 void Relativty::HMDDriver::retrieve_client_vector_packet_threaded() {
 	WSADATA wsaData;
 	struct sockaddr_in server, client;
@@ -513,6 +677,8 @@ void Relativty::HMDDriver::retrieve_client_vector_packet_threaded() {
 	}
 	Relativty::ServerDriver::Log("Thread3: successfully stopped\n");
 }
+*/
+
 
 Relativty::HMDDriver::HMDDriver(std::string myserial):RelativtyDevice(myserial, "akira_") {
 	// keys for use with the settings API

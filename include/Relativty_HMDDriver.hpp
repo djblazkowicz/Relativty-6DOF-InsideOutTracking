@@ -23,6 +23,10 @@
 #include "Relativty_base_device.h"
 #include "serial/serial.h"
 
+
+#include <spectacularAI/realsense/plugin.hpp>
+#include <librealsense2/rs.hpp>
+
 namespace Relativty {
 	class HMDDriver : public RelativtyDevice<false>
 	{
@@ -56,7 +60,7 @@ namespace Relativty {
 		hid_device* handle;
 		serial::Serial relativ;
 
-		std::atomic<float> quat[4];
+		std::atomic<float> quat[4] = {0,0,0,0};
 		std::atomic<bool> retrieve_quaternion_isOn = false;
 		std::atomic<bool> new_quaternion_avaiable = false;
 
@@ -64,9 +68,10 @@ namespace Relativty {
 		void calibrate_quaternion();
 
 		std::thread retrieve_quaternion_thread_worker;
-		void retrieve_device_quaternion_packet_threaded();
+		//void retrieve_device_quaternion_packet_threaded();
+		//void dummy_quaternion_thread_func();
 
-		std::atomic<float> vector_xyz[3];
+		std::atomic<float> vector_xyz[3] = {0,0,0};
 		std::atomic<bool> retrieve_vector_isOn = false;
 		std::atomic<bool> new_vector_avaiable = false;
 		bool start_tracking_server = false;
@@ -92,13 +97,27 @@ namespace Relativty {
 
 		std::atomic<bool> serverNotReady = true;
 		std::thread retrieve_vector_thread_worker;
-		void retrieve_client_vector_packet_threaded_UDP();
-		void retrieve_client_vector_packet_threaded();
+		//void retrieve_client_vector_packet_threaded_UDP();
+		//void retrieve_client_vector_packet_threaded_UDP_REALSENSE();
+		//void retrieve_client_vector_packet_threaded();
 
 		std::thread update_pose_thread_worker;
 		void update_pose_threaded();
+		void update_pose_threaded2();
 
 		std::string PyPath;
 		std::thread startPythonTrackingClient_worker;
+
+
+		BOOL bNewBehavior = FALSE;
+		DWORD dwBytesReturned = 0;
+		sockaddr_in server, client;
+		WSADATA wsa;
+		SOCKET server_socket;
+
+
+		spectacularAI::rsPlugin::Configuration config;
+		rs2::context rsContext;
+
 	};
 }
