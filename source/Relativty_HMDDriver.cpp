@@ -126,12 +126,12 @@ void Relativty::HMDDriver::Deactivate() {
 	hid_close(this->handle);
 	hid_exit();
 
-	if (this->start_tracking_server) {
-		this->retrieve_vector_isOn = false;
-		closesocket(this->sock);
-		this->retrieve_vector_thread_worker.join();
-		WSACleanup();
-	}
+
+	this->retrieve_vector_isOn = false;
+	closesocket(this->sock);
+	this->retrieve_vector_thread_worker.join();
+	WSACleanup();
+	
 	RelativtyDevice::Deactivate();
 	this->update_pose_thread_worker.join();
 
@@ -141,7 +141,7 @@ void Relativty::HMDDriver::Deactivate() {
 void Relativty::HMDDriver::update_pose_threaded() {
 	Relativty::ServerDriver::Log("Thread2: successfully started\n");
 	while (m_unObjectId != vr::k_unTrackedDeviceIndexInvalid) {
-		if (this->new_quaternion_avaiable && this->new_vector_avaiable) {
+		if (this->new_vector_avaiable) {
 			m_Pose.qRotation.w = this->quat[0];
 			m_Pose.qRotation.x = this->quat[1];
 			m_Pose.qRotation.y = this->quat[2];
@@ -153,24 +153,6 @@ void Relativty::HMDDriver::update_pose_threaded() {
 
 			vr::VRServerDriverHost()->TrackedDevicePoseUpdated(m_unObjectId, m_Pose, sizeof(vr::DriverPose_t));
 			this->new_quaternion_avaiable = false;
-			this->new_vector_avaiable = false;
-
-		} else if (this->new_quaternion_avaiable) {
-			m_Pose.qRotation.w = this->quat[0];
-			m_Pose.qRotation.x = this->quat[1];
-			m_Pose.qRotation.y = this->quat[2];
-			m_Pose.qRotation.z = this->quat[3];
-
-			vr::VRServerDriverHost()->TrackedDevicePoseUpdated(m_unObjectId, m_Pose, sizeof(vr::DriverPose_t));
-			this->new_quaternion_avaiable = false;
-
-		} else if (this->new_vector_avaiable) {
-
-			m_Pose.vecPosition[0] = this->vector_xyz[0];
-			m_Pose.vecPosition[1] = this->vector_xyz[1];
-			m_Pose.vecPosition[2] = this->vector_xyz[2];
-
-			vr::VRServerDriverHost()->TrackedDevicePoseUpdated(m_unObjectId, m_Pose, sizeof(vr::DriverPose_t));
 			this->new_vector_avaiable = false;
 
 		}
@@ -225,38 +207,38 @@ void Relativty::HMDDriver::retrieve_device_quaternion_packet_threaded() {
 					quaternion_packet[1] = ((packet_buffer[5] << 8) | packet_buffer[6]);
 					quaternion_packet[2] = ((packet_buffer[9] << 8) | packet_buffer[10]);
 					quaternion_packet[3] = ((packet_buffer[13] << 8) | packet_buffer[14]);
-					this->quat[0] = static_cast<float>(quaternion_packet[0]) / 16384.0f;
-					this->quat[1] = static_cast<float>(quaternion_packet[1]) / 16384.0f;
-					this->quat[2] = static_cast<float>(quaternion_packet[2]) / 16384.0f;
-					this->quat[3] = static_cast<float>(quaternion_packet[3]) / 16384.0f;
+					//this->quat[0] = static_cast<float>(quaternion_packet[0]) / 16384.0f;
+					//this->quat[1] = static_cast<float>(quaternion_packet[1]) / 16384.0f;
+					//this->quat[2] = static_cast<float>(quaternion_packet[2]) / 16384.0f;
+					//this->quat[3] = static_cast<float>(quaternion_packet[3]) / 16384.0f;
 
-					float qres[4];
-					qres[0] = quat[0];
-					qres[1] = quat[1];
-					qres[2] = -1 * quat[2];
-					qres[3] = -1 * quat[3];
+					//float qres[4];
+					//qres[0] = quat[0];
+					//qres[1] = quat[1];
+					//qres[2] = -1 * quat[2];
+					//qres[3] = -1 * quat[3];
 
-					this->quat[0] = qres[0];
-					this->quat[1] = qres[1];
-					this->quat[2] = qres[2];
-					this->quat[3] = qres[3];
+					//this->quat[0] = qres[0];
+					//this->quat[1] = qres[1];
+					//this->quat[2] = qres[2];
+					//this->quat[3] = qres[3];
 
-					this->calibrate_quaternion();
+					//this->calibrate_quaternion();
 
-					this->new_quaternion_avaiable = true;
+					//this->new_quaternion_avaiable = false;
 
 				}
 				else {
 
 					pak* recv = (pak*)packet_buffer;
-					this->quat[0] = recv->quat[0];
-					this->quat[1] = recv->quat[1];
-					this->quat[2] = recv->quat[2];
-					this->quat[3] = recv->quat[3];
+					//this->quat[0] = recv->quat[0];
+					//this->quat[1] = recv->quat[1];
+					//this->quat[2] = recv->quat[2];
+					//this->quat[3] = recv->quat[3];
 
-					this->calibrate_quaternion();
+					//this->calibrate_quaternion();
 
-					this->new_quaternion_avaiable = true;
+					//this->new_quaternion_avaiable = false;
 
 				}
 
@@ -305,14 +287,14 @@ void Relativty::HMDDriver::retrieve_device_quaternion_packet_threaded() {
 									valid_reading = false;
 								}
 								if (valid_reading) {
-									this->quat[0] = read_vals[0];
-									this->quat[1] = read_vals[1];
-									this->quat[2] = read_vals[2];
-									this->quat[3] = read_vals[3];
+									//this->quat[0] = read_vals[0];
+									//this->quat[1] = read_vals[1];
+									//this->quat[2] = read_vals[2];
+									//this->quat[3] = read_vals[3];
 
-									this->calibrate_quaternion();
+									//this->calibrate_quaternion();
 
-									this->new_quaternion_avaiable = true;
+									//this->new_quaternion_avaiable = true;
 
 								}
 							}
@@ -358,8 +340,8 @@ void Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP()
 	float scales_coordinate_meter[3]{ this->scalesCoordinateMeterX, this->scalesCoordinateMeterY, this->scalesCoordinateMeterZ };
 	float offset_coordinate[3] = { this->offsetCoordinateX, this->offsetCoordinateY, this->offsetCoordinateZ };
 
-	float coordinate[3]{ 0, 0, 0 };
-	float coordinate_normalized[3];
+	float coordinate[3];
+	float rotation[4];
 
 
 
@@ -396,6 +378,18 @@ void Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP()
 
 	while (this->retrieve_vector_isOn)
 	{
+
+		if ((0x01 & GetAsyncKeyState(0x52)) != 0) {
+			this->quat[0] = 0;
+			this->quat[1] = 0;
+			this->quat[2] = 0;
+			this->quat[3] = 0;
+			this->vector_xyz[0] = 0;
+			this->vector_xyz[1] = 0;
+			this->vector_xyz[2] = 0;
+			this->new_vector_avaiable = true;
+
+		}
 		Relativty::ServerDriver::Log("UDP SERVER: Waiting for data...");
 		fflush(stdout);
 		char message[BUFLEN] = {};
@@ -428,17 +422,29 @@ void Relativty::HMDDriver::retrieve_client_vector_packet_threaded_UDP()
 		coordinate[0] = std::stof(words[0]);
 		coordinate[1] = std::stof(words[1]);
 		coordinate[2] = std::stof(words[2]);
+		rotation[0] = std::stof(words[3]);
+		rotation[1] = std::stof(words[5]);
+		rotation[2] = std::stof(words[6]);
+		rotation[3] = std::stof(words[4]);
 
 		Relativty::ServerDriver::Log("UDP SERVER: " + words[0] + "," + words[1] + "," + words[2] + "\n");
 
-		Normalize(coordinate_normalized, coordinate, normalize_max, normalize_min, this->upperBound, this->lowerBound, scales_coordinate_meter, offset_coordinate);
+		DriverLog("UDP SERVER: MESSAGE ARRAY COUNT IS: %d", words.size());
 
-		//this->vector_xyz[0] = coordinate_normalized[1];
-		//this->vector_xyz[1] = coordinate_normalized[2];
-		//this->vector_xyz[2] = coordinate_normalized[0];
-		this->vector_xyz[0] = coordinate[0];
-		this->vector_xyz[1] = coordinate[1];
-		this->vector_xyz[2] = coordinate[2];
+
+		this->vector_xyz[0] = coordinate[0];//1
+		this->vector_xyz[1] = coordinate[1];//2
+		this->vector_xyz[2] = coordinate[2];//0
+
+		
+
+		this->quat[0] = rotation[0];
+		this->quat[1] = rotation[1];
+		this->quat[2] = rotation[2];
+		this->quat[3] = rotation[3];
+
+		this->calibrate_quaternion();
+		//this->new_quaternion_avaiable = true;
 		this->new_vector_avaiable = true;
 
 		if (sendto(server_socket, message, strlen(message), 0, (sockaddr*)&client, sizeof(sockaddr_in)) == SOCKET_ERROR)
