@@ -22,13 +22,13 @@
       "offsetCoordinateX" : -5.0,
       "offsetCoordinateY" : 0,
       "offsetCoordinateZ" : 0,
-      "startTrackingServer" : false,
+      "startTrackingServer" : true,
       "hmdPid" : 9,
       "hmdVid": 4617,
       "hmdIMUdmpPackets":  true,
 	  "IsMPUSerial":	true,
 	  "COMPORT":	"COM12",
-      "PyPath" : "E:/Relativty/Relativty_Driver/Relativty/resources/PYTHONPATH"      
+      "PyPath" : "D:/CODE/PYTHONPATH/"      
    },
    "Relativty_extendedDisplay": {
       "windowX" : 3440,
