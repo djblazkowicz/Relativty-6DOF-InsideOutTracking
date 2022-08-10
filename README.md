@@ -1,5 +1,7 @@
-# *the driver*
+this is based on https://github.com/relativty/Relativty
 
-to compile thy code one mustn't use `Debug`, thou shall use `Release` to compile thy scriptures
+this fork is designed to use an intel realsense 265 with the spectaculat ai sdk for inside-out tracking
 
-thou will summon the compiler god's wrath, shall thou one use `Debug`
+https://www.intelrealsense.com/sdk-2/
+https://github.com/SpectacularAI/sdk
+https://github.com/djblazkowicz/Honours-6DoF-InsideOut-VR
